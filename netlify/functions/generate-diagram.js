@@ -1,46 +1,47 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.handler = async (event) => {
-  console.log("--- INITIALIZING ARCHITECTURAL ENGINE ---");
+  console.log("--- SYSTEM BOOT: ARCHITECTURAL DIAGRAMMER ---");
 
   try {
+    // 1. Initialize the AI with the explicit version
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     
-    // UPDATED FOR 2026: Using the core Gemini 3 model
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash" });
+    // 2. Using gemini-2.0-flash (The 2026 stable workhorse)
+    // If you see a 404 again, try "gemini-1.5-flash-latest" here.
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-2.0-flash",
+      apiVersion: "v1beta" // This often fixes the 404 Not Found issue
+    });
 
     const { imageBase64, mimeType } = JSON.parse(event.body);
-    console.log("Image received. Type:", mimeType);
+    console.log("Input received. Preparing site diagram...");
 
     const prompt = `Convert this aerial photo into a minimalist architectural site diagram. 
-      STYLE: Heavy charcoal building footprints, pale gray roads, tan railroad corridor. 
-      SHADING: Apply gray shading to the southwest faces for 3D depth.
+      STYLE: Charcoal outlines for buildings, pale gray for roads, tan for railroads. 
+      Apply gray shading to the southwest faces for 3D depth. 
       EXCLUDE: No trees, no cars, no red.`;
 
-    console.log("Sending request to Gemini...");
+    console.log("Contacting Google AI Cluster...");
     
-    // The 2026 models are extremely fast—this should take ~5 seconds
     const result = await model.generateContent([
       { inlineData: { data: imageBase64, mimeType } },
       { text: prompt }
     ]);
 
     const response = await result.response;
-    
-    // In 2026, Flash can output images directly in the response parts
-    const imagePart = response.candidates[0].content.parts.find(p => p.inlineData);
+    const part = response.candidates[0].content.parts.find(p => p.inlineData);
 
-    if (!imagePart) {
-      console.warn("AI returned text but no image. Lee, check your prompt/settings.");
-      throw new Error("The AI didn't generate an image part.");
+    if (!part) {
+      throw new Error("AI returned text instead of a diagram. Check safety settings.");
     }
 
-    console.log("Diagram generated. Sending to client...");
+    console.log("Success! Diagram generated.");
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: imagePart.inlineData.data }),
+      body: JSON.stringify({ image: part.inlineData.data }),
     };
 
   } catch (error) {
