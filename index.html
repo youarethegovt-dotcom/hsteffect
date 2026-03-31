@@ -1,34 +1,80 @@
-// ... (inside the <script> tag of your index.html)
-btn.onclick = async () => {
-    btn.innerText = "TALKING TO SERVER...";
-    const file = input.files[0];
-    const reader = new FileReader();
-    
-    reader.onload = async () => {
-        try {
-            const base64 = reader.result.split(',')[1];
-            console.log("Sending to Netlify...");
-            
-            const res = await fetch('/.netlify/functions/generate-diagram', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
-            });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Diagrammer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans p-8">
+    <div class="max-w-2xl mx-auto border-t-4 border-black pt-8">
+        <h1 class="text-3xl font-bold tracking-tighter mb-2">SITE DIAGRAMMER v1.0</h1>
+        <p class="text-gray-500 mb-8 uppercase text-xs tracking-widest">Aerial to Architectural Line Drawing</p>
 
-            if (!res.ok) {
-                const errorText = await res.text();
-                throw new Error(`Server Error: ${res.status} - ${errorText}`);
+        <div class="border-2 border-dashed border-gray-300 p-12 text-center rounded-lg bg-white mb-8">
+            <input type="file" id="imageInput" class="hidden" accept="image/*">
+            <label for="imageInput" class="cursor-pointer">
+                <span class="bg-black text-white px-6 py-3 text-sm font-bold hover:bg-gray-800 transition">UPLOAD AERIAL PHOTO</span>
+            </label>
+            <p id="fileName" class="mt-4 text-sm text-gray-400"></p>
+        </div>
+
+        <button id="generateBtn" class="w-full bg-gray-200 text-gray-400 font-bold py-4 rounded disabled:cursor-not-allowed" disabled>GENERATE DIAGRAM</button>
+
+        <div id="resultContainer" class="mt-12 hidden">
+            <h2 class="text-xs font-bold mb-4 border-b border-gray-200 pb-2">OUTPUT</h2>
+            <img id="outputImage" class="w-full border border-gray-200 shadow-xl">
+            <a id="downloadBtn" class="block text-center mt-4 text-sm underline font-bold cursor-pointer">DOWNLOAD PNG</a>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('imageInput');
+        const btn = document.getElementById('generateBtn');
+        const outputImg = document.getElementById('outputImage');
+        const container = document.getElementById('resultContainer');
+
+        input.onchange = (e) => {
+            if(e.target.files.length > 0) {
+                document.getElementById('fileName').innerText = e.target.files[0].name;
+                btn.disabled = false;
+                btn.classList.replace('bg-gray-200', 'bg-black');
+                btn.classList.replace('text-gray-400', 'text-white');
             }
+        };
 
-            const data = await res.json();
-            outputImg.src = `data:image/png;base64,${data.image}`;
-            container.classList.remove('hidden');
-            btn.innerText = "GENERATE DIAGRAM";
-        } catch (err) {
-            console.error(err);
-            alert("FRONTEND ERROR: " + err.message);
-            btn.innerText = "GENERATE DIAGRAM";
-        }
-    };
-    reader.readAsDataURL(file);
-};
+        btn.onclick = async () => {
+            alert("STEP 1: Button Clicked. Starting Read...");
+            btn.innerText = "READING FILE...";
+            
+            const file = input.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = async () => {
+                alert("STEP 2: File Read Success. Sending to Server...");
+                btn.innerText = "TALKING TO NETLIFY...";
+                
+                try {
+                    const base64 = reader.result.split(',')[1];
+                    const res = await fetch('/.netlify/functions/generate-diagram', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
+                    });
+
+                    alert("STEP 3: Server Responded with status: " + res.status);
+
+                    if (!res.ok) {
+                        const errorMsg = await res.text();
+                        throw new Error(errorMsg);
+                    }
+
+                    const data = await res.json();
+                    outputImg.src = `data:image/png;base64,${data.image}`;
+                    container.classList.remove('hidden');
+                    btn.innerText = "GENERATE DIAGRAM";
+                    alert("SUCCESS! Image should be visible below.");
+
+                } catch (err) {
+                    console.error(err);
+                    alert("CRITICAL ERROR: " + err.message);
