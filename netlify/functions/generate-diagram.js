@@ -1,17 +1,12 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenAI } = require("@google/genai");
 
 exports.handler = async (event) => {
   console.log("--- STARTING SITE ANALYSIS: NASHVILLE ENGINE ---");
 
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    
-    // THE FIX: We add the 'v1beta' version as a second argument here.
-    // This tells the library to look in the correct folder for the preview model.
-    const model = genAI.getGenerativeModel(
-      { model: "gemini-3-flash-preview" },
-      { apiVersion: "v1beta" } 
-    );
+    // 1. Initialize the 2026 Client
+    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const modelId = "gemini-3-flash-preview";
 
     const { imageBase64, mimeType } = JSON.parse(event.body);
     console.log("Image received and parsed.");
@@ -24,30 +19,40 @@ exports.handler = async (event) => {
       - Apply soft gray shadows strictly to the southwest faces of buildings.
       - EXCLUDE: No trees, no cars, and NO red colors.`;
 
-    console.log("Sending request to Gemini 3 Flash Preview (v1beta)...");
+    console.log(`Sending request to ${modelId} via 2026 SDK...`);
     
-    const result = await model.generateContent([
-      { inlineData: { data: imageBase64, mimeType } },
-      { text: prompt }
-    ]);
+    // 2. The 2026 request structure
+    const response = await client.models.generateContent({
+      model: modelId,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inlineData: { data: imageBase64, mimeType: mimeType } }
+          ]
+        }
+      ]
+    });
 
-    const response = await result.response;
-    const imagePart = response.candidates[0].content.parts.find(p => p.inlineData);
+    // 3. Extract the image from the new response format
+    const part = response.candidates[0].content.parts.find(p => p.inlineData);
 
-    if (!imagePart) {
-      console.warn("AI returned text but no image part.");
-      throw new Error("No image was generated.");
+    if (!part) {
+      console.warn("AI returned text but no image.");
+      throw new Error("The AI didn't generate an image part.");
     }
 
-    console.log("Success! Diagram ready.");
+    console.log("Success! Diagram generated.");
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: imagePart.inlineData.data }),
+      body: JSON.stringify({ image: part.inlineData.data }),
     };
 
   } catch (error) {
+    // This will now catch the ACTUAL error if it persists
     console.error("DIAGNOSTIC ERROR:", error.message);
     return {
       statusCode: 500,
