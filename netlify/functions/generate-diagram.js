@@ -1,38 +1,47 @@
-// netlify/functions/generate-diagram.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
-
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    // Using the 2026 high-volume image model
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-image-preview" });
+    
+    // We'll use the stable version of the image model
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-image" });
 
     const { imageBase64, mimeType } = JSON.parse(event.body);
 
-    const prompt = `Analyze this aerial image and recreate it as a minimalist architectural line drawing. 
-      STYLE RULES:
-      - Use thin charcoal lines for all building footprints and rooftop geometries.
-      - Roads must be a very pale gray.
-      - Railroad lines must be a pale orange/tan wash with fine parallel rail lines.
-      - Apply a soft gray shadow strictly to the southwest faces of buildings for depth.
-      - EXCLUSIONS: No trees, no cars, no photographic textures, and NO red colors.
-      - Output: High-resolution, clean line diagram.`;
+    const prompt = `Convert this aerial photo into a minimalist architectural site diagram. 
+      Style: Charcoal line weights, pale gray roads, tan railroads, and southwest shadows. 
+      No trees, no cars, no red.`;
 
     const result = await model.generateContent([
-      prompt,
-      { inlineData: { data: imageBase64, mimeType } }
+      {
+        inlineData: {
+          data: imageBase64,
+          mimeType: mimeType
+        }
+      },
+      { text: prompt }
     ]);
 
-    // The image model returns the generated image as a base64 string in the response
-    const generatedImage = result.response.candidates[0].content.parts[0].inlineData.data;
+    // Added a check to make sure the AI actually sent back an image
+    const response = await result.response;
+    const part = response.candidates[0].content.parts[0];
+    
+    if (!part.inlineData) {
+      throw new Error("AI returned text instead of an image. Check your prompt.");
+    }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ image: generatedImage }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: part.inlineData.data }),
     };
+
   } catch (error) {
-    return { statusCode: 500, body: error.message };
+    console.error("DEBUG ERROR:", error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: error.message }),
+    };
   }
 };
