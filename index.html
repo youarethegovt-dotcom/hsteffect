@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Site Diagrammer</title>
+    <title>Hannah Terry Effect</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans p-8">
@@ -14,12 +14,15 @@
         <div class="border-2 border-dashed border-gray-300 p-12 text-center rounded-lg bg-white mb-8">
             <input type="file" id="imageInput" class="hidden" accept="image/*">
             <label for="imageInput" class="cursor-pointer">
-                <span class="bg-black text-white px-6 py-3 text-sm font-bold hover:bg-gray-800 transition">UPLOAD AERIAL PHOTO</span>
+                <span id="uploadLabel" class="bg-black text-white px-6 py-3 text-sm font-bold hover:bg-gray-800 transition">UPLOAD AERIAL PHOTO</span>
             </label>
-            <p id="fileName" class="mt-4 text-sm text-gray-400"></p>
+            <p id="fileName" class="mt-4 text-sm text-gray-400">No file selected</p>
         </div>
 
-        <button id="generateBtn" class="w-full bg-gray-200 text-gray-400 font-bold py-4 rounded disabled:cursor-not-allowed" disabled>GENERATE DIAGRAM</button>
+        <button id="generateBtn" 
+                style="background-color: #e5e7eb; color: #9ca3af; cursor: not-allowed;"
+                class="w-full font-bold py-4 rounded transition-all" 
+                disabled>GENERATE DIAGRAM</button>
 
         <div id="resultContainer" class="mt-12 hidden">
             <h2 class="text-xs font-bold mb-4 border-b border-gray-200 pb-2">OUTPUT</h2>
@@ -31,29 +34,30 @@
     <script>
         const input = document.getElementById('imageInput');
         const btn = document.getElementById('generateBtn');
-        const outputImg = document.getElementById('outputImage');
-        const container = document.getElementById('resultContainer');
+        const fileNameDisp = document.getElementById('fileName');
 
-        input.onchange = (e) => {
-            if(e.target.files.length > 0) {
-                document.getElementById('fileName').innerText = e.target.files[0].name;
+        // This part unlocks the button when you pick a file
+        input.addEventListener('change', () => {
+            if (input.files && input.files[0]) {
+                fileNameDisp.innerText = "Ready to process: " + input.files[0].name;
+                
+                // Force the button to activate
                 btn.disabled = false;
-                btn.classList.replace('bg-gray-200', 'bg-black');
-                btn.classList.replace('text-gray-400', 'text-white');
+                btn.style.backgroundColor = "black";
+                btn.style.color = "white";
+                btn.style.cursor = "pointer";
+                console.log("File selected. Button unlocked.");
             }
-        };
+        });
 
         btn.onclick = async () => {
-            alert("STEP 1: Button Clicked. Starting Read...");
-            btn.innerText = "READING FILE...";
+            btn.innerText = "TALKING TO NETLIFY...";
+            btn.disabled = true; // Prevent double-clicks
             
             const file = input.files[0];
             const reader = new FileReader();
             
             reader.onload = async () => {
-                alert("STEP 2: File Read Success. Sending to Server...");
-                btn.innerText = "TALKING TO NETLIFY...";
-                
                 try {
                     const base64 = reader.result.split(',')[1];
                     const res = await fetch('/.netlify/functions/generate-diagram', {
@@ -62,19 +66,27 @@
                         body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
                     });
 
-                    alert("STEP 3: Server Responded with status: " + res.status);
-
                     if (!res.ok) {
                         const errorMsg = await res.text();
                         throw new Error(errorMsg);
                     }
 
                     const data = await res.json();
-                    outputImg.src = `data:image/png;base64,${data.image}`;
-                    container.classList.remove('hidden');
+                    document.getElementById('outputImage').src = `data:image/png;base64,${data.image}`;
+                    document.getElementById('resultContainer').classList.remove('hidden');
+                    document.getElementById('downloadBtn').href = document.getElementById('outputImage').src;
+                    document.getElementById('downloadBtn').download = "site-diagram.png";
+                    
                     btn.innerText = "GENERATE DIAGRAM";
-                    alert("SUCCESS! Image should be visible below.");
-
+                    btn.disabled = false;
                 } catch (err) {
-                    console.error(err);
-                    alert("CRITICAL ERROR: " + err.message);
+                    alert("SERVER ERROR: " + err.message);
+                    btn.innerText = "GENERATE DIAGRAM";
+                    btn.disabled = false;
+                }
+            };
+            reader.readAsDataURL(file);
+        };
+    </script>
+</body>
+</html>
