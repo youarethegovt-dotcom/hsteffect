@@ -1,0 +1,6 @@
+{
+  "name": "hsteffect",
+  "dependencies": {
+    "@google/generative-ai": "^0.1.0"
+  }
+}
