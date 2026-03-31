@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hannah Terry Effect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans p-8">
+    <div class="max-w-2xl mx-auto border-t-4 border-black pt-8">
+        <h1 class="text-3xl font-bold tracking-tighter mb-2">SITE DIAGRAMMER v1.0</h1>
+        <p class="text-gray-500 mb-8 uppercase text-xs tracking-widest">Aerial to Architectural Line Drawing</p>
+
+        <div class="border-2 border-dashed border-gray-300 p-12 text-center rounded-lg bg-white mb-8">
+            <input type="file" id="imageInput" class="hidden" accept="image/*">
+            <label for="imageInput" class="cursor-pointer">
+                <span class="bg-black text-white px-6 py-3 text-sm font-bold hover:bg-gray-800 transition">UPLOAD AERIAL PHOTO</span>
+            </label>
+            <p id="fileName" class="mt-4 text-sm text-gray-400"></p>
+        </div>
+
+        <button id="generateBtn" class="w-full bg-gray-200 text-gray-400 font-bold py-4 rounded disabled:cursor-not-allowed" disabled>GENERATE DIAGRAM</button>
+
+        <div id="resultContainer" class="mt-12 hidden">
+            <h2 class="text-xs font-bold mb-4 border-b border-gray-200 pb-2">OUTPUT</h2>
+            <img id="outputImage" class="w-full border border-gray-200 shadow-xl">
+            <a id="downloadBtn" class="block text-center mt-4 text-sm underline font-bold cursor-pointer">DOWNLOAD PNG</a>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('imageInput');
+        const btn = document.getElementById('generateBtn');
+        const outputImg = document.getElementById('outputImage');
+        const container = document.getElementById('resultContainer');
+
+        input.onchange = (e) => {
+            document.getElementById('fileName').innerText = e.target.files[0].name;
+            btn.disabled = false;
+            btn.classList.replace('bg-gray-200', 'bg-black');
+            btn.classList.replace('text-gray-400', 'text-white');
+        };
+
+        btn.onclick = async () => {
+            btn.innerText = "PROCESSING SITE DATA...";
+            const reader = new FileReader();
+            reader.readAsDataURL(input.files[0]);
+            reader.onload = async () => {
+                const base64 = reader.result.split(',')[1];
+                const res = await fetch('/.netlify/functions/generate-diagram', {
+                    method: 'POST',
+                    body: JSON.stringify({ imageBase64: base64, mimeType: input.files[0].type })
+                });
+                const data = await res.json();
+                outputImg.src = `data:image/png;base64,${data.image}`;
+                container.classList.remove('hidden');
+                btn.innerText = "GENERATE DIAGRAM";
+                document.getElementById('downloadBtn').href = outputImg.src;
+                document.getElementById('downloadBtn').download = "site-diagram.png";
+            };
+        };
+    </script>
+</body>
+</html>
