@@ -5,88 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hannah Terry Effect</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans p-8">
-    <div class="max-w-2xl mx-auto border-t-4 border-black pt-8">
-        <h1 class="text-3xl font-bold tracking-tighter mb-2">SITE DIAGRAMMER v1.0</h1>
-        <p class="text-gray-500 mb-8 uppercase text-xs tracking-widest">Aerial to Architectural Line Drawing</p>
+<body class="bg-slate-50 text-slate-900 p-6 md:p-12">
+    <div class="max-w-3xl mx-auto">
+        <header class="border-b-4 border-black pb-6 mb-12">
+            <h1 class="text-4xl font-black tracking-tighter uppercase">Site Diagrammer <span class="text-slate-400 text-xl font-normal ml-2">v2.0 (Vector)</span></h1>
+            <p class="text-xs font-bold text-slate-500 tracking-[0.2em] mt-2 uppercase">Nashville Architecture AI Pipeline</p>
+        </header>
 
-        <div class="border-2 border-dashed border-gray-300 p-12 text-center rounded-lg bg-white mb-8">
-            <input type="file" id="imageInput" class="hidden" accept="image/*">
-            <label for="imageInput" class="cursor-pointer">
-                <span id="uploadLabel" class="bg-black text-white px-6 py-3 text-sm font-bold hover:bg-gray-800 transition">UPLOAD AERIAL PHOTO</span>
-            </label>
-            <p id="fileName" class="mt-4 text-sm text-gray-400">No file selected</p>
+        <div class="bg-white border border-slate-200 rounded-xl p-8 shadow-sm mb-8">
+            <div class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg py-12 px-4 transition-colors hover:border-black group">
+                <input type="file" id="imageInput" class="hidden" accept="image/*">
+                <label for="imageInput" class="cursor-pointer text-center">
+                    <div class="bg-black text-white px-8 py-3 font-bold text-sm tracking-widest hover:bg-slate-800 transition uppercase mb-4 inline-block">
+                        Select Aerial Photo
+                    </div>
+                    <p id="fileName" class="text-slate-400 text-xs font-medium uppercase tracking-wider">No file selected</p>
+                </label>
+            </div>
         </div>
 
         <button id="generateBtn" 
-                style="background-color: #e5e7eb; color: #9ca3af; cursor: not-allowed;"
-                class="w-full font-bold py-4 rounded transition-all" 
-                disabled>GENERATE DIAGRAM</button>
+                class="w-full py-5 rounded-lg font-black text-lg tracking-widest transition-all duration-300 disabled:opacity-50"
+                style="background-color: #e2e8f0; color: #94a3b8; cursor: not-allowed;"
+                disabled>
+            GENERATE ARCHITECTURAL DIAGRAM
+        </button>
 
-        <div id="resultContainer" class="mt-12 hidden">
-            <h2 class="text-xs font-bold mb-4 border-b border-gray-200 pb-2">OUTPUT</h2>
-            <img id="outputImage" class="w-full border border-gray-200 shadow-xl">
-            <a id="downloadBtn" class="block text-center mt-4 text-sm underline font-bold cursor-pointer">DOWNLOAD PNG</a>
-        </div>
-    </div>
-
-    <script>
-        const input = document.getElementById('imageInput');
-        const btn = document.getElementById('generateBtn');
-        const fileNameDisp = document.getElementById('fileName');
-
-        // This part unlocks the button when you pick a file
-        input.addEventListener('change', () => {
-            if (input.files && input.files[0]) {
-                fileNameDisp.innerText = "Ready to process: " + input.files[0].name;
-                
-                // Force the button to activate
-                btn.disabled = false;
-                btn.style.backgroundColor = "black";
-                btn.style.color = "white";
-                btn.style.cursor = "pointer";
-                console.log("File selected. Button unlocked.");
-            }
-        });
-
-        btn.onclick = async () => {
-            btn.innerText = "TALKING TO NETLIFY...";
-            btn.disabled = true; // Prevent double-clicks
-            
-            const file = input.files[0];
-            const reader = new FileReader();
-            
-            reader.onload = async () => {
-                try {
-                    const base64 = reader.result.split(',')[1];
-                    const res = await fetch('/.netlify/functions/generate-diagram', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
-                    });
-
-                    if (!res.ok) {
-                        const errorMsg = await res.text();
-                        throw new Error(errorMsg);
-                    }
-
-                    const data = await res.json();
-                    document.getElementById('outputImage').src = `data:image/png;base64,${data.image}`;
-                    document.getElementById('resultContainer').classList.remove('hidden');
-                    document.getElementById('downloadBtn').href = document.getElementById('outputImage').src;
-                    document.getElementById('downloadBtn').download = "site-diagram.png";
-                    
-                    btn.innerText = "GENERATE DIAGRAM";
-                    btn.disabled = false;
-                } catch (err) {
-                    alert("SERVER ERROR: " + err.message);
-                    btn.innerText = "GENERATE DIAGRAM";
-                    btn.disabled = false;
-                }
-            };
-            reader.readAsDataURL(file);
-        };
-    </script>
-</body>
-</html>
+        <div id="resultContainer" class="mt-16 hidden">
+            <div class="flex items-center justify-between mb-6 border-b border-slate-200 pb-4">
+                <h2 class="text-xs font-black uppercase tracking-[0.3em]">Architectural Output</h2>
+                <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1
