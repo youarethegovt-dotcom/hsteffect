@@ -13,11 +13,11 @@
 <body class="bg-slate-50 text-slate-900 p-6 md:p-12">
     <div class="max-w-3xl mx-auto">
         <header class="border-b-4 border-black pb-6 mb-12">
-            <h1 class="text-4xl font-black tracking-tighter uppercase">Site Diagrammer <span class="text-slate-400 text-xl font-normal ml-2">v2.0 (Vector)</span></h1>
+            <h1 class="text-4xl font-black tracking-tighter uppercase">Site Diagrammer <span class="text-slate-400 text-xl font-normal ml-2 text-nowrap">v3.0 (Pro)</span></h1>
             <p class="text-xs font-bold text-slate-500 tracking-[0.2em] mt-2 uppercase">Nashville Architecture AI Pipeline</p>
         </header>
 
-        <div class="bg-white border border-slate-200 rounded-xl p-8 shadow-sm mb-8">
+        <div class="bg-white border border-slate-200 rounded-xl p-8 shadow-sm mb-6">
             <div class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg py-12 px-4 transition-colors hover:border-black group">
                 <input type="file" id="imageInput" class="hidden" accept="image/*">
                 <label for="imageInput" class="cursor-pointer text-center">
@@ -27,6 +27,13 @@
                     <p id="fileName" class="text-slate-400 text-xs font-medium uppercase tracking-wider">No file selected</p>
                 </label>
             </div>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Style Specifications</label>
+            <textarea id="styleInput" 
+                      class="w-full h-32 p-4 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-black transition-all"
+                      placeholder="Example: Thin 0.25mm charcoal outlines, pale 10% gray roads, and soft isometric shadows on the South faces."></textarea>
         </div>
 
         <button id="generateBtn" 
@@ -39,39 +46,32 @@
         <div id="resultContainer" class="mt-16 hidden">
             <div class="flex items-center justify-between mb-6 border-b border-slate-200 pb-4">
                 <h2 class="text-xs font-black uppercase tracking-[0.3em]">Architectural Output</h2>
-                <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded tracking-tighter">VECTOR PATHS READY</span>
+                <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded">VECTOR PATHS READY</span>
             </div>
             
             <div class="bg-white p-4 border border-slate-200 shadow-2xl rounded-sm mb-8">
-                <img id="outputImage" class="w-full grayscale-0 hover:grayscale transition-all duration-500">
+                <img id="outputImage" class="w-full">
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <a id="downloadPng" class="flex items-center justify-center gap-2 bg-white border-2 border-black text-black py-4 font-bold text-xs tracking-widest hover:bg-slate-50 transition cursor-pointer uppercase">
-                    Download Raster (PNG)
-                </a>
-                <a id="downloadSvg" class="flex items-center justify-center gap-2 bg-black text-white py-4 font-bold text-xs tracking-widest hover:bg-slate-800 transition cursor-pointer uppercase">
-                    Download Vector (SVG)
-                </a>
+                <a id="downloadPng" class="flex items-center justify-center gap-2 bg-white border-2 border-black text-black py-4 font-bold text-xs tracking-widest hover:bg-slate-50 transition cursor-pointer uppercase">Download Raster (PNG)</a>
+                <a id="downloadSvg" class="flex items-center justify-center gap-2 bg-black text-white py-4 font-bold text-xs tracking-widest hover:bg-slate-800 transition cursor-pointer uppercase">Download Vector (SVG)</a>
             </div>
         </div>
     </div>
 
     <script>
         const input = document.getElementById('imageInput');
+        const styleText = document.getElementById('styleInput');
         const btn = document.getElementById('generateBtn');
         const fileNameDisp = document.getElementById('fileName');
         const outputImg = document.getElementById('outputImage');
         const resultContainer = document.getElementById('resultContainer');
 
-        // Logic to detect when you've chosen a photo
-        input.addEventListener('change', function(e) {
+        input.addEventListener('change', function() {
             if (this.files && this.files[0]) {
-                const file = this.files[0];
-                fileNameDisp.innerText = "READY: " + file.name.toUpperCase();
+                fileNameDisp.innerText = "READY: " + this.files[0].name.toUpperCase();
                 fileNameDisp.style.color = "black";
-                
-                // Unlock the Generate Button
                 btn.disabled = false;
                 btn.style.backgroundColor = "black";
                 btn.style.color = "white";
@@ -79,12 +79,11 @@
             }
         });
 
-        // Logic to send to Google and vectorize
         btn.addEventListener('click', async () => {
             const originalText = btn.innerText;
-            btn.innerText = "VECTORIZING SITE... PLEASE WAIT";
+            btn.innerText = "VECTORIZING SITE...";
             btn.disabled = true;
-            btn.style.opacity = "0.6";
+            btn.style.opacity = "0.5";
             
             const file = input.files[0];
             const reader = new FileReader();
@@ -95,22 +94,21 @@
                     const response = await fetch('/.netlify/functions/generate-diagram', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
+                        body: JSON.stringify({ 
+                            imageBase64: base64, 
+                            mimeType: file.type,
+                            customInstructions: styleText.value // Sending your typed words
+                        })
                     });
 
                     const data = await response.json();
                     if (data.error) throw new Error(data.error);
 
-                    // Show the results on screen
                     outputImg.src = `data:image/png;base64,${data.image}`;
-                    
-                    // Setup the PNG button
                     document.getElementById('downloadPng').href = `data:image/png;base64,${data.image}`;
                     document.getElementById('downloadPng').download = "site-plan.png";
-                    
-                    // Setup the Vector button
                     document.getElementById('downloadSvg').href = `data:image/svg+xml;base64,${data.svg}`;
-                    document.getElementById('downloadSvg').download = "site-vector.svg";
+                    document.getElementById('downloadSvg').download = "site-paths.svg";
 
                     resultContainer.classList.remove('hidden');
                     resultContainer.scrollIntoView({ behavior: 'smooth' });
@@ -123,6 +121,7 @@
                     alert("ENGINE ERROR: " + err.message);
                     btn.innerText = originalText;
                     btn.disabled = false;
+                    btn.style.opacity = "1";
                 }
             };
             reader.readAsDataURL(file);
