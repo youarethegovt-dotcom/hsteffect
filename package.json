@@ -1,6 +1,7 @@
 {
   "name": "hsteffect",
   "dependencies": {
-    "@google/genai": "latest"
+    "@google/generative-ai": "latest",
+    "potrace": "latest"
   }
 }
