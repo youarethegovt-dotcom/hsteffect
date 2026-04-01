@@ -39,4 +39,94 @@
         <div id="resultContainer" class="mt-16 hidden">
             <div class="flex items-center justify-between mb-6 border-b border-slate-200 pb-4">
                 <h2 class="text-xs font-black uppercase tracking-[0.3em]">Architectural Output</h2>
-                <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1
+                <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded tracking-tighter">VECTOR PATHS READY</span>
+            </div>
+            
+            <div class="bg-white p-4 border border-slate-200 shadow-2xl rounded-sm mb-8">
+                <img id="outputImage" class="w-full grayscale-0 hover:grayscale transition-all duration-500">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <a id="downloadPng" class="flex items-center justify-center gap-2 bg-white border-2 border-black text-black py-4 font-bold text-xs tracking-widest hover:bg-slate-50 transition cursor-pointer uppercase">
+                    Download Raster (PNG)
+                </a>
+                <a id="downloadSvg" class="flex items-center justify-center gap-2 bg-black text-white py-4 font-bold text-xs tracking-widest hover:bg-slate-800 transition cursor-pointer uppercase">
+                    Download Vector (SVG)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('imageInput');
+        const btn = document.getElementById('generateBtn');
+        const fileNameDisp = document.getElementById('fileName');
+        const outputImg = document.getElementById('outputImage');
+        const resultContainer = document.getElementById('resultContainer');
+
+        // Logic to detect when you've chosen a photo
+        input.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                const file = this.files[0];
+                fileNameDisp.innerText = "READY: " + file.name.toUpperCase();
+                fileNameDisp.style.color = "black";
+                
+                // Unlock the Generate Button
+                btn.disabled = false;
+                btn.style.backgroundColor = "black";
+                btn.style.color = "white";
+                btn.style.cursor = "pointer";
+            }
+        });
+
+        // Logic to send to Google and vectorize
+        btn.addEventListener('click', async () => {
+            const originalText = btn.innerText;
+            btn.innerText = "VECTORIZING SITE... PLEASE WAIT";
+            btn.disabled = true;
+            btn.style.opacity = "0.6";
+            
+            const file = input.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = async () => {
+                try {
+                    const base64 = reader.result.split(',')[1];
+                    const response = await fetch('/.netlify/functions/generate-diagram', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
+                    });
+
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error);
+
+                    // Show the results on screen
+                    outputImg.src = `data:image/png;base64,${data.image}`;
+                    
+                    // Setup the PNG button
+                    document.getElementById('downloadPng').href = `data:image/png;base64,${data.image}`;
+                    document.getElementById('downloadPng').download = "site-plan.png";
+                    
+                    // Setup the Vector button
+                    document.getElementById('downloadSvg').href = `data:image/svg+xml;base64,${data.svg}`;
+                    document.getElementById('downloadSvg').download = "site-vector.svg";
+
+                    resultContainer.classList.remove('hidden');
+                    resultContainer.scrollIntoView({ behavior: 'smooth' });
+                    
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+
+                } catch (err) {
+                    alert("ENGINE ERROR: " + err.message);
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    </script>
+</body>
+</html>
