@@ -2,7 +2,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const potrace = require("potrace");
 
 exports.handler = async (event) => {
-  console.log("--- STARTING VECTOR ENGINE ---");
+  console.log("--- STARTING DYNAMIC VECTOR ENGINE ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -11,15 +11,23 @@ exports.handler = async (event) => {
       { apiVersion: "v1beta" }
     );
 
-    const { imageBase64, mimeType } = JSON.parse(event.body);
+    // Now we capture the customInstructions from the frontend
+    const { imageBase64, mimeType, customInstructions } = JSON.parse(event.body);
 
+    // We build the prompt using YOUR instructions
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
-      Convert this aerial photo into a high-contrast minimalist site diagram.
-      - Use BOLD charcoal outlines for buildings.
-      - Use solid gray for roads.
-      - Use a distinct hatch/wash for the railroad.
-      - IMPORTANT: High contrast between lines and background to assist vectorization.`;
+      TASK: Convert this aerial photo into a high-quality site diagram.
+      
+      PRIMARY STYLE INSTRUCTIONS: 
+      ${customInstructions || "Minimalist charcoal site plan with bold footprints and gray roads."}
+      
+      TECHNICAL REQUIREMENTS:
+      - High contrast for vectorization.
+      - Clean boundaries between shapes.
+      - No photographic textures, no trees, no cars.`;
 
+    console.log("Sending to Gemini with Custom Specs...");
+    
     const result = await model.generateContent([
       { inlineData: { data: imageBase64, mimeType } },
       { text: prompt }
@@ -29,19 +37,15 @@ exports.handler = async (event) => {
     const imagePart = response.candidates[0].content.parts.find(p => p.inlineData);
     const pngBase64 = imagePart.inlineData.data;
 
-    // --- NEW: VECTORIZATION LOGIC ---
-    console.log("Vectorizing image...");
+    console.log("Vectorizing result...");
     const imgBuffer = Buffer.from(pngBase64, 'base64');
     
     const svgData = await new Promise((resolve, reject) => {
-      // Potrace works best on high-contrast architectural lines
       potrace.trace(imgBuffer, { threshold: 128 }, (err, svg) => {
         if (err) reject(err);
         resolve(svg);
       });
     });
-
-    console.log("SVG Success.");
 
     return {
       statusCode: 200,
@@ -53,7 +57,7 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
-    console.error("VECTOR ERROR:", error.message);
+    console.error("ENGINE ERROR:", error.message);
     return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
