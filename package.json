@@ -1,6 +1,6 @@
 {
-  "name": "nashville-ai-pipeline",
-  "version": "4.0.0",
+  "name": "nashville-diagrammer-pro",
+  "version": "4.4.0",
   "dependencies": {
     "@google/generative-ai": "0.3.0",
     "potrace": "1.0.2",
