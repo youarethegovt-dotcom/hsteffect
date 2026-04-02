@@ -1,44 +1,45 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const ImageTracer = require("imagetracerjs");
+const potrace = require("potrace");
 const sharp = require("sharp");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING SPEED-OPTIMIZED ENGINE: V3.3 ---");
-  
+  console.log("--- EXECUTING PRO-ARCHITECT ENGINE: V3.5 ---");
+
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-image-preview" }, { apiVersion: "v1beta" });
 
     const { imageBase64, mimeType, customInstructions, width, height } = JSON.parse(event.body);
 
-    const defaultStyle = ".25mm dark charcoal outline around all buildings, .1mm thin gray lines for all of the building forms, roads to be a lighter gray tone, water represented with pale light blue, white masses for buildings with gray shade for the sides of the buildings in shadow, no text.";
+    const defaultStyle = ".25mm dark charcoal outline around all buildings, .1mm thin gray lines for all of the building forms, roads to be a lighter gray tone, water represented with pale light blue, white masses for buildings with gray shade for the sides of the buildings in shadow, not overly detailed, no text.";
 
+    // We ask for HIGH CONTRAST to make the Illustrator paths perfect
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
       STYLE: ${customInstructions || defaultStyle}
-      TECHNICAL: Use solid flat colors only. No gradients, no textures, no noise.`;
+      TECHNICAL: Use pure white backgrounds and high-contrast charcoal lines. 
+      This is for vectorization—ensure all building footprints are clearly closed shapes.`;
 
-    // 1. Gemini Generation (usually 15-20s)
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
 
-    // 2. High-speed Resize
-    console.log("Resizing...");
+    // 1. Resize to match your 1897px upload
     const aiBuffer = await sharp(Buffer.from(pngBase64, 'base64'))
       .resize(parseInt(width), parseInt(height), { fit: 'fill' })
       .toBuffer();
 
-    // 3. OPTIMIZED COLOR VECTORIZATION
-    console.log("Tracing colors (Speed Mode)...");
-    const svgData = ImageTracer.bufferToSVG(aiBuffer, {
-        ltres: 1.5,        // Increased for speed (less "crunchy" paths)
-        qtres: 1.5,        // Increased for speed
-        numberofcolors: 5, // Reduced from 8 to 5 for faster layering
-        mincolorratio: 0.05,
-        pathomit: 32,      // Ignores tiny specks/noise to save time
-        strokewidth: 0.5
+    // 2. STABLE VECTORIZATION
+    // Potrace produces the cleanest paths for CAD/Illustrator
+    const svgData = await new Promise((resolve, reject) => {
+      potrace.trace(aiBuffer, { 
+        threshold: 180, // Higher threshold for cleaner architectural lines
+        turdSize: 10,   // Ignores small visual "noise"
+        optTolerance: 0.4 
+      }, (err, svg) => {
+        if (err) reject(err);
+        resolve(svg);
+      });
     });
 
-    console.log("Success! Sending to browser.");
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -50,6 +51,6 @@ exports.handler = async (event) => {
 
   } catch (error) {
     console.error("DIAGNOSTIC:", error.message);
-    return { statusCode: 500, body: JSON.stringify({ error: "The process took too long. Try a smaller screenshot or simpler style." }) };
+    return { statusCode: 500, body: JSON.stringify({ error: "Engine Error: " + error.message }) };
   }
 };
