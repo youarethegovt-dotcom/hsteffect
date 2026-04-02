@@ -3,7 +3,7 @@ const potrace = require("potrace");
 const sharp = require("sharp");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING RELIABILITY PATCH: V3.5 ---");
+  console.log("--- EXECUTING STEALTH ENGINE: V3.6 ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -12,51 +12,56 @@ exports.handler = async (event) => {
     const { imageBase64, mimeType, customInstructions, width, height } = JSON.parse(event.body);
 
     const palette = { charcoal: "#333333", water: "#AACCFF" };
-    const defaultStyle = ".25mm charcoal (#333333) outlines for buildings, pale light blue (#AACCFF) for water.";
 
+    // We tell the AI to be extremely "flat" and "graphic" for faster processing
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
-      STYLE: ${customInstructions || defaultStyle}
-      TECHNICAL: Pure white background. High contrast. Use ONLY #333333 and #AACCFF.`;
+      STYLE: ${customInstructions || "Charcoal outlines (#333333) and pale blue water (#AACCFF)."}
+      TECHNICAL: FLAT COLORS ONLY. No anti-aliasing. No textures. Pure white background.`;
 
-    // 1. AI Generation
+    // 1. AI Drawing Phase
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // 2. INTERNAL SCALING (The Secret to Speed)
-    // We scale the "Tracing Buffer" to 1000px. This makes the vector math instant.
-    const processingBuffer = await sharp(aiBuffer).resize(1000).toBuffer();
+    // 2. INTERNAL COMPRESSION (The Speed Key)
+    // We downscale to 800px internally. This makes the vector math 10x faster.
+    const traceSize = 800;
+    const traceBuffer = await sharp(aiBuffer).resize(traceSize).toBuffer();
 
-    // 3. Robust Trace Logic
-    const traceLayer = async (threshold, color) => {
+    // 3. SURGICAL COLOR EXTRACTION
+    const traceLayer = async (threshold, colorHex) => {
         return new Promise((resolve) => {
-            // Check if potrace is loaded correctly
-            const engine = potrace.trace ? potrace : require("potrace");
-            
-            engine.trace(processingBuffer, { threshold, turdSize: 10 }, (err, svg) => {
+            potrace.trace(traceBuffer, { 
+                threshold, 
+                turdSize: 15, // Ignores minor artifacts
+                optTolerance: 1.0 
+            }, (err, svg) => {
                 if (err) return resolve('');
                 const paths = svg.match(/<path.*?\/>/g);
-                resolve(paths ? paths.join('').replace(/fill="black"/g, `fill="${color}"`) : '');
+                resolve(paths ? paths.join('').replace(/fill="black"/g, `fill="${colorHex}"`) : '');
             });
         });
     };
 
-    const [outlines, context] = await Promise.all([
-        traceLayer(130, palette.charcoal), 
-        traceLayer(210, palette.water)
-    ]);
+    // Sequential tracing is actually more stable on small servers
+    console.log("Tracing Layer 1: Context...");
+    const context = await traceLayer(220, palette.water);
+    
+    console.log("Tracing Layer 2: Outlines...");
+    const outlines = await traceLayer(130, palette.charcoal);
 
-    // 4. Scale the SVG back up to your original dimensions via viewBox
+    // 4. ASSEMBLE ILLUSTRATOR SVG
     const finalSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 1000 1000" preserveAspectRatio="none">
-            <rect width="1000" height="1000" fill="white"/>
-            <g id="Context_Layers">${context}</g>
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${traceSize} ${traceSize}" preserveAspectRatio="none">
+            <rect width="${traceSize}" height="${traceSize}" fill="white"/>
+            <g id="Context_Water_Layers">${context}</g>
             <g id="Architectural_Outlines">${outlines}</g>
         </svg>`;
 
-    // Create the High-Res PNG return
+    // Output high-res PNG for the team
     const highResPng = await sharp(aiBuffer).resize(parseInt(width), parseInt(height)).toBuffer();
 
+    console.log("Pipeline Complete. Sending results.");
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -68,6 +73,6 @@ exports.handler = async (event) => {
 
   } catch (error) {
     console.error("DIAGNOSTIC ERROR:", error.message);
-    return { statusCode: 500, body: JSON.stringify({ error: "Pipeline Error: " + error.message }) };
+    return { statusCode: 500, body: JSON.stringify({ error: "Pipeline Engine Stalled: " + error.message }) };
   }
 };
