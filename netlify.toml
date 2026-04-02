@@ -1,2 +1,8 @@
 [functions]
-timeout = 26
+  # This tells Netlify how to handle the heavy image math
+  external_node_modules = ["sharp"]
+  node_bundler = "esbuild"
+
+[functions."generate-diagram"]
+  # This gives us the 26-second window for the AI to draw
+  timeout = 26
