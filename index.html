@@ -9,17 +9,14 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
         html { scroll-behavior: smooth; }
-        
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .loading-pulse { animation: pulse 1.5s infinite; }
+        .loading { animation: pulse 1.5s infinite; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 p-6 md:p-12">
     <div class="max-w-3xl mx-auto">
         <header class="border-b-4 border-black pb-6 mb-12">
-            <h1 class="text-4xl font-black tracking-tighter uppercase">
-                Site Diagrammer <span class="text-slate-400 text-xl font-normal ml-2">v3.4 (Pro)</span>
-            </h1>
+            <h1 class="text-4xl font-black tracking-tighter uppercase">Site Diagrammer <span class="text-slate-400 text-xl font-normal ml-2">v3.2</span></h1>
             <p class="text-xs font-bold text-slate-500 tracking-[0.2em] mt-2 uppercase italic">Nashville Architecture AI Pipeline</p>
         </header>
 
@@ -27,9 +24,7 @@
             <div class="border-2 border-dashed border-slate-300 rounded-lg py-10 px-4 hover:border-black transition-all group">
                 <input type="file" id="imageInput" class="hidden" accept="image/*">
                 <label for="imageInput" class="cursor-pointer">
-                    <div class="bg-black text-white px-8 py-3 font-bold text-sm tracking-widest uppercase mb-4 inline-block hover:bg-slate-800 transition">
-                        Select Aerial Photo
-                    </div>
+                    <div class="bg-black text-white px-8 py-3 font-bold text-sm tracking-widest uppercase mb-4 inline-block hover:bg-slate-800 transition">Select Aerial Photo</div>
                     <p id="fileName" class="text-slate-400 text-xs font-bold uppercase tracking-widest">No file selected</p>
                     <p id="fileDim" class="text-slate-300 text-[10px] mt-1 font-black uppercase tracking-tighter"></p>
                 </label>
@@ -37,134 +32,91 @@
         </div>
 
         <div class="mb-6">
-            <div class="flex justify-between items-end mb-2 px-1">
-                <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Style Specifications</label>
-                <span class="text-[9px] text-slate-300 font-bold uppercase italic">Leave empty for firm standard</span>
-            </div>
-            <textarea id="styleInput" 
-                      class="w-full h-28 p-4 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-black transition-all shadow-inner"
-                      placeholder="Example: Thin 0.25mm charcoal outlines, pale 10% gray roads, and light blue water fills..."></textarea>
+            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Style Specifications</label>
+            <textarea id="styleInput" class="w-full h-24 p-4 border border-slate-200 rounded-lg text-sm font-medium focus:border-black outline-none" placeholder="Leave blank for firm standard..."></textarea>
         </div>
 
-        <button id="generateBtn" 
-                class="w-full py-5 rounded-lg font-black text-lg tracking-widest transition-all duration-300 disabled:opacity-50"
-                style="background-color: #e2e8f0; color: #94a3b8; cursor: not-allowed;"
-                disabled>
-            GENERATE ARCHITECTURAL DIAGRAM
-        </button>
-
-        <p id="statusMsg" class="text-center text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-[0.2em] hidden">Engine analyzing site context...</p>
+        <button id="generateBtn" class="w-full py-5 rounded-lg font-black text-lg tracking-widest transition-all opacity-50 bg-slate-200 text-slate-400 cursor-not-allowed" disabled>GENERATE ARCHITECTURAL DIAGRAM</button>
 
         <div id="resultContainer" class="mt-16 hidden">
             <div class="flex items-center justify-between mb-6 border-b border-slate-200 pb-4">
                 <h2 class="text-xs font-black uppercase tracking-[0.3em]">Architectural Output</h2>
                 <div class="flex gap-2">
                     <span id="resBadge" class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded">MATCHED SCALE</span>
-                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded tracking-tighter uppercase">Illustrator Ready</span>
+                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded">ILLUSTRATOR READY</span>
                 </div>
             </div>
-            
-            <div class="bg-white p-4 border border-slate-200 shadow-2xl rounded-sm mb-8">
-                <img id="outputImage" class="w-full h-auto block border border-slate-100">
-            </div>
-
+            <img id="outputImage" class="w-full shadow-2xl border border-slate-100 mb-8 block">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <a id="downloadPng" class="flex items-center justify-center bg-white border-2 border-black text-black py-4 font-bold text-xs tracking-widest hover:bg-slate-50 transition cursor-pointer uppercase">
-                    Download High-Res PNG
-                </a>
-                <a id="downloadSvg" class="flex items-center justify-center bg-black text-white py-4 font-bold text-xs tracking-widest hover:bg-slate-800 transition cursor-pointer uppercase">
-                    Download Vector (SVG)
-                </a>
+                <a id="downloadPng" class="flex items-center justify-center bg-white border-2 border-black text-black py-4 font-bold text-xs tracking-widest hover:bg-slate-50 cursor-pointer uppercase">Download High-Res PNG</a>
+                <a id="downloadSvg" class="flex items-center justify-center bg-black text-white py-4 font-bold text-xs tracking-widest hover:bg-slate-800 cursor-pointer uppercase">Download Vector (SVG)</a>
             </div>
-            <p class="text-center text-[10px] text-slate-400 mt-12 uppercase tracking-widest">
-                Optimized for Nashville Firm Workflows (Illustrator & Rhino)
-            </p>
         </div>
     </div>
 
     <script>
-        const input = document.getElementById('imageInput');
-        const styleText = document.getElementById('styleInput');
-        const btn = document.getElementById('generateBtn');
-        const fileNameDisp = document.getElementById('fileName');
-        const fileDimDisp = document.getElementById('fileDim');
-        const outputImg = document.getElementById('outputImage');
-        const resultContainer = document.getElementById('resultContainer');
-        const statusMsg = document.getElementById('statusMsg');
-
+        const input = document.getElementById('imageInput'), styleText = document.getElementById('styleInput'), btn = document.getElementById('generateBtn');
+        const fileNameDisp = document.getElementById('fileName'), fileDimDisp = document.getElementById('fileDim');
+        const outputImg = document.getElementById('outputImage'), resultContainer = document.getElementById('resultContainer');
         let origW = 0, origH = 0;
 
-        // MEASURE & UNLOCK
-        input.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
+        input.onchange = (e) => {
+            const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = (re) => {
-                const img = new Image();
-                img.src = re.target.result;
+                const img = new Image(); img.src = re.target.result;
                 img.onload = () => {
-                    origW = img.naturalWidth;
-                    origH = img.naturalHeight;
-                    fileNameDisp.innerText = "READY: " + file.name.toUpperCase();
-                    fileNameDisp.style.color = "black";
+                    origW = img.naturalWidth; origH = img.naturalHeight;
+                    fileNameDisp.innerText = file.name.toUpperCase(); fileNameDisp.style.color = "black";
                     fileDimDisp.innerText = `${origW}PX X ${origH}PX`;
                     btn.disabled = false;
-                    btn.style.backgroundColor = "black";
-                    btn.style.color = "white";
-                    btn.style.cursor = "pointer";
-                    btn.style.opacity = "1";
+                    btn.classList.remove('opacity-50', 'bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                    btn.classList.add('bg-black', 'text-white', 'cursor-pointer');
                 };
             };
             reader.readAsDataURL(file);
-        });
+        };
 
-        // EXECUTE ENGINE
-                btn.onclick = async () => {
-            btn.innerText = "VECTORIZING SITE...";
-            btn.classList.add('loading-pulse');
-            btn.disabled = true;
-            statusMsg.classList.remove('hidden');
+        btn.onclick = async () => {
+            const originalText = btn.innerText; btn.innerText = "VECTORIZING SITE...";
+            btn.classList.add('loading'); btn.disabled = true;
 
             try {
                 const reader = new FileReader();
                 reader.readAsDataURL(input.files[0]);
                 reader.onload = async () => {
                     const base64 = reader.result.split(',')[1];
+                    const startTime = Date.now();
                     const response = await fetch('/.netlify/functions/generate-diagram', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            imageBase64: base64, 
-                            mimeType: input.files[0].type,
-                            customInstructions: styleText.value,
-                            width: origW, 
-                            height: origH 
-                        })
+                        body: JSON.stringify({ imageBase64: base64, mimeType: input.files[0].type, customInstructions: styleText.value, width: origW, height: origH })
                     });
 
                     const data = await response.json();
-                    
                     if (data.error) throw new Error(data.error);
 
-                    // --- THE FIX: Ensure we are setting the SRC correctly ---
                     outputImg.src = `data:image/png;base64,${data.image}`;
                     
-                    document.getElementById('downloadPng').href = `data:image/png;base64,${data.image}`;
-                    document.getElementById('downloadSvg').href = `data:image/svg+xml;base64,${data.svg}`;
+                    const pngLink = document.getElementById('downloadPng');
+                    pngLink.href = `data:image/png;base64,${data.image}`;
+                    pngLink.download = `SitePlan_${origW}x${origH}.png`;
 
-                    // Reveal the results
+                    const svgLink = document.getElementById('downloadSvg');
+                    svgLink.href = `data:image/svg+xml;base64,${data.svg}`;
+                    svgLink.download = `SiteVector_${origW}x${origH}.svg`;
+
                     resultContainer.classList.remove('hidden');
                     document.getElementById('resBadge').innerText = `${origW} X ${origH}`;
                     resultContainer.scrollIntoView({ behavior: 'smooth' });
+                    
+                    console.log(`Pipeline success in ${((Date.now() - startTime)/1000).toFixed(1)}s`);
                 };
             } catch (err) {
-                alert("ENGINE NOTICE: " + err.message);
+                console.error("Critical Front-end Error:", err);
+                alert("DIAGNOSTIC NOTICE: " + err.message);
             } finally {
-                btn.innerText = "GENERATE DIAGRAM";
-                btn.classList.remove('loading-pulse');
-                btn.disabled = false;
-                statusMsg.classList.add('hidden');
+                btn.innerText = originalText; btn.classList.remove('loading'); btn.disabled = false;
             }
         };
     </script>
