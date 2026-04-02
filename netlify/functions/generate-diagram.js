@@ -3,36 +3,39 @@ const sharp = require("sharp");
 const potrace = require("potrace");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING HIGH-DETAIL TECHNICAL ENGINE: V4.7 ---");
+  console.log("--- EXECUTING SKELETAL LINE ENGINE: V4.8 ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-image-preview" }, { apiVersion: "v1beta" });
 
     const { imageBase64, mimeType, customInstructions, width, height } = JSON.parse(event.body);
-    const palette = { charcoal: "#333333", water: "#AACCFF" };
+    const palette = { charcoal: "#000000", water: "#AACCFF" };
 
     const originalWidth = parseInt(width);
     const originalHeight = parseInt(height);
     const ratio = originalHeight / originalWidth;
     
-    // TRACE RESOLUTION: We're bumping this to 1200px for better detail
-    const traceW = 1200;
-    const traceH = Math.round(1200 * ratio);
+    // RESOLUTION BUMP: More pixels = More "interpretation" room
+    const traceW = 1500;
+    const traceH = Math.round(1500 * ratio);
 
-    // UPDATED PROMPT: We are now explicitly asking for "HAIRLINES"
-    const prompt = `ACT AS A TECHNICAL ARCHITECTURAL ILLUSTRATOR. 
-      Convert this site into a diagram using:
-      - EXTREMELY THIN 0.1mm technical hairlines for all building edges.
-      - High contrast Black (#000000) on Pure White background.
-      - Solid light blue (#AACCFF) fills for water.
-      - NO BLOBS, NO SHADING, NO TEXTURES. Just crisp, sharp vector-ready lines.`;
+    const prompt = `ACT AS A SENIOR ARCHITECTURAL DRAFTSMAN.
+      Convert this site into a SKELETAL wireframe diagram.
+      - USE: 1px absolute black (#000000) aliased lines. No anti-aliasing.
+      - STYLE: Pure white background. Solid pale blue (#AACCFF) for water.
+      - IMPORTANT: Think in 1D lines, not 2D shapes. No shadows, no shading, no thickness.
+      - DETAIL: Every building edge must be a single, distinct black pixel path.`;
 
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    const traceBuffer = await sharp(aiBuffer).resize(traceW, traceH).toBuffer();
+    // High-resolution sharpen before tracing
+    const traceBuffer = await sharp(aiBuffer)
+        .resize(traceW, traceH)
+        .sharpen() // This makes the 1px lines "pop" for the tracer
+        .toBuffer();
 
     const runTrace = (threshold, colorHex, layerName, isOutlines) => {
         return new Promise((resolve) => {
@@ -40,10 +43,9 @@ exports.handler = async (event) => {
             
             tracer(traceBuffer, { 
                 threshold: threshold, 
-                // CRITICAL TWEAKS FOR SHARPNESS:
-                turdSize: isOutlines ? 2 : 15,    // Much smaller 'turdSize' to keep fine lines
-                optTolerance: isOutlines ? 0.2 : 1.0, // Lower tolerance = Sharper corners
-                alphamax: 0.1                     // Favors straight lines over curves
+                turdSize: isOutlines ? 1 : 20,     // '1' ensures we don't lose any thin lines
+                optTolerance: isOutlines ? 0.1 : 1.0, // Aggressive corner sharpening
+                alphamax: 0.01                     // Forces straight lines (Architectural standard)
             }, (err, svg) => {
                 if (err) return resolve("");
                 const paths = svg.match(/<path.*?\/>/g);
@@ -54,9 +56,9 @@ exports.handler = async (event) => {
         });
     };
 
-    // We use a stricter threshold for outlines (140) to keep them thin
-    const outlines = await runTrace(140, palette.charcoal, "Architectural_Outlines", true);
-    const context = await runTrace(220, palette.water, "Nashville_Site_Context", false);
+    // Strict threshold (100) to ensure only the absolute blackest pixels become lines
+    const outlines = await runTrace(100, palette.charcoal, "Architectural_Outlines", true);
+    const context = await runTrace(215, palette.water, "Nashville_Site_Context", false);
 
     const finalSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="${originalWidth}" height="${originalHeight}" viewBox="0 0 ${traceW} ${traceH}">
