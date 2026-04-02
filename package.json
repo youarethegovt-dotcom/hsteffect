@@ -2,6 +2,7 @@
   "name": "hsteffect",
   "dependencies": {
     "@google/generative-ai": "latest",
-    "potrace": "latest"
+    "potrace": "latest",
+    "sharp": "latest"
   }
 }
