@@ -1,16 +1,7 @@
 {
-  "name": "nashville-site-diagrammer",
-  "version": "1.0.0",
-  "description": "Architectural Site AI Pipeline",
-  "main": "index.html",
   "dependencies": {
     "@google/generative-ai": "^0.3.0",
     "potrace": "^1.0.2",
     "sharp": "^0.33.2"
-  },
-  "devDependencies": {
-    "netlify-cli": "^17.0.0"
-  },
-  "author": "Lee",
-  "license": "ISC"
+  }
 }
