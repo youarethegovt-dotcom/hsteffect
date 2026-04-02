@@ -1,7 +1,9 @@
 {
+  "name": "nashville-ai-pipeline",
+  "version": "4.0.0",
   "dependencies": {
-    "@google/generative-ai": "^0.3.0",
-    "potrace": "^1.0.2",
-    "sharp": "^0.33.2"
+    "@google/generative-ai": "0.3.0",
+    "potrace": "1.0.2",
+    "sharp": "0.33.2"
   }
 }
