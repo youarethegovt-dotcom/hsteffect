@@ -8,12 +8,24 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom scroll behavior for the result reveal */
+        html { scroll-behavior: smooth; }
+
+        /* Subtle loading animation for the button */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .loading { animation: pulse 1.5s infinite; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 p-6 md:p-12">
     <div class="max-w-3xl mx-auto">
         <header class="border-b-4 border-black pb-6 mb-12">
-            <h1 class="text-4xl font-black tracking-tighter uppercase">Site Diagrammer <span class="text-slate-400 text-xl font-normal ml-2 text-nowrap">v3.0 (Pro)</span></h1>
+            <h1 class="text-4xl font-black tracking-tighter uppercase">
+                Site Diagrammer <span class="text-slate-400 text-xl font-normal ml-2">v3.1 (High-Res)</span>
+            </h1>
             <p class="text-xs font-bold text-slate-500 tracking-[0.2em] mt-2 uppercase">Nashville Architecture AI Pipeline</p>
         </header>
 
@@ -25,15 +37,19 @@
                         Select Aerial Photo
                     </div>
                     <p id="fileName" class="text-slate-400 text-xs font-medium uppercase tracking-wider">No file selected</p>
+                    <p id="fileDim" class="text-slate-300 text-[10px] mt-1 font-bold uppercase"></p>
                 </label>
             </div>
         </div>
 
         <div class="mb-6">
-            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Style Specifications</label>
+            <div class="flex justify-between items-end mb-2">
+                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Style Specifications</label>
+                <span class="text-[9px] text-slate-300 font-bold uppercase italic">Leave empty for firm standard</span>
+            </div>
             <textarea id="styleInput" 
-                      class="w-full h-32 p-4 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-black transition-all"
-                      placeholder="Example: Thin 0.25mm charcoal outlines, pale 10% gray roads, and soft isometric shadows on the South faces."></textarea>
+                      class="w-full h-28 p-4 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-black transition-all"
+                      placeholder="Example: 0.5mm bold outlines for primary structures, dashed lines for property boundaries..."></textarea>
         </div>
 
         <button id="generateBtn" 
@@ -46,17 +62,27 @@
         <div id="resultContainer" class="mt-16 hidden">
             <div class="flex items-center justify-between mb-6 border-b border-slate-200 pb-4">
                 <h2 class="text-xs font-black uppercase tracking-[0.3em]">Architectural Output</h2>
-                <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded">VECTOR PATHS READY</span>
+                <div class="flex gap-2">
+                    <span id="resBadge" class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded">MATCHED SCALE</span>
+                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded tracking-tighter">VECTOR PATHS READY</span>
+                </div>
             </div>
             
             <div class="bg-white p-4 border border-slate-200 shadow-2xl rounded-sm mb-8">
-                <img id="outputImage" class="w-full">
+                <img id="outputImage" class="w-full h-auto block">
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <a id="downloadPng" class="flex items-center justify-center gap-2 bg-white border-2 border-black text-black py-4 font-bold text-xs tracking-widest hover:bg-slate-50 transition cursor-pointer uppercase">Download Raster (PNG)</a>
-                <a id="downloadSvg" class="flex items-center justify-center gap-2 bg-black text-white py-4 font-bold text-xs tracking-widest hover:bg-slate-800 transition cursor-pointer uppercase">Download Vector (SVG)</a>
+                <a id="downloadPng" class="flex items-center justify-center gap-2 bg-white border-2 border-black text-black py-4 font-bold text-xs tracking-widest hover:bg-slate-50 transition cursor-pointer uppercase">
+                    Download High-Res PNG
+                </a>
+                <a id="downloadSvg" class="flex items-center justify-center gap-2 bg-black text-white py-4 font-bold text-xs tracking-widest hover:bg-slate-800 transition cursor-pointer uppercase">
+                    Download Vector (SVG)
+                </a>
             </div>
+            <p class="text-center text-[10px] text-slate-400 mt-8 uppercase tracking-widest">
+                Optimized for Adobe Illustrator & Rhino 2026
+            </p>
         </div>
     </div>
 
@@ -65,25 +91,49 @@
         const styleText = document.getElementById('styleInput');
         const btn = document.getElementById('generateBtn');
         const fileNameDisp = document.getElementById('fileName');
+        const fileDimDisp = document.getElementById('fileDim');
         const outputImg = document.getElementById('outputImage');
         const resultContainer = document.getElementById('resultContainer');
 
+        // Global variables to store original dimensions
+        let originalWidth = 0;
+        let originalHeight = 0;
+
+        // --- STEP 1: MEASURE ON UPLOAD ---
         input.addEventListener('change', function() {
             if (this.files && this.files[0]) {
-                fileNameDisp.innerText = "READY: " + this.files[0].name.toUpperCase();
-                fileNameDisp.style.color = "black";
-                btn.disabled = false;
-                btn.style.backgroundColor = "black";
-                btn.style.color = "white";
-                btn.style.cursor = "pointer";
+                const file = this.files[0];
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        originalWidth = img.naturalWidth;
+                        originalHeight = img.naturalHeight;
+                        
+                        // Update UI with specs
+                        fileNameDisp.innerText = "READY: " + file.name.toUpperCase();
+                        fileNameDisp.style.color = "black";
+                        fileDimDisp.innerText = `${originalWidth}PX X ${originalHeight}PX`;
+                        
+                        // Unlock Generator
+                        btn.disabled = false;
+                        btn.style.backgroundColor = "black";
+                        btn.style.color = "white";
+                        btn.style.cursor = "pointer";
+                    };
+                };
+                reader.readAsDataURL(file);
             }
         });
 
+        // --- STEP 2: GENERATE WITH DIMENSIONS ---
         btn.addEventListener('click', async () => {
             const originalText = btn.innerText;
-            btn.innerText = "VECTORIZING SITE...";
+            btn.innerText = "MEASURING & VECTORIZING...";
+            btn.classList.add('loading');
             btn.disabled = true;
-            btn.style.opacity = "0.5";
             
             const file = input.files[0];
             const reader = new FileReader();
@@ -97,31 +147,42 @@
                         body: JSON.stringify({ 
                             imageBase64: base64, 
                             mimeType: file.type,
-                            customInstructions: styleText.value // Sending your typed words
+                            customInstructions: styleText.value,
+                            width: originalWidth,  // The Handshake
+                            height: originalHeight // The Handshake
                         })
                     });
 
                     const data = await response.json();
                     if (data.error) throw new Error(data.error);
 
+                    // Update Image UI
                     outputImg.src = `data:image/png;base64,${data.image}`;
-                    document.getElementById('downloadPng').href = `data:image/png;base64,${data.image}`;
-                    document.getElementById('downloadPng').download = "site-plan.png";
-                    document.getElementById('downloadSvg').href = `data:image/svg+xml;base64,${data.svg}`;
-                    document.getElementById('downloadSvg').download = "site-paths.svg";
+                    
+                    // Link Downloads
+                    const pngLink = document.getElementById('downloadPng');
+                    pngLink.href = `data:image/png;base64,${data.image}`;
+                    pngLink.download = `SitePlan_${originalWidth}x${originalHeight}.png`;
 
+                    const svgLink = document.getElementById('downloadSvg');
+                    svgLink.href = `data:image/svg+xml;base64,${data.svg}`;
+                    svgLink.download = `SiteVector_${originalWidth}x${originalHeight}.svg`;
+
+                    // Final Reveal
                     resultContainer.classList.remove('hidden');
+                    document.getElementById('resBadge').innerText = `${originalWidth} X ${originalHeight}`;
                     resultContainer.scrollIntoView({ behavior: 'smooth' });
                     
                     btn.innerText = originalText;
+                    btn.classList.remove('loading');
                     btn.disabled = false;
-                    btn.style.opacity = "1";
 
                 } catch (err) {
+                    console.error(err);
                     alert("ENGINE ERROR: " + err.message);
                     btn.innerText = originalText;
+                    btn.classList.remove('loading');
                     btn.disabled = false;
-                    btn.style.opacity = "1";
                 }
             };
             reader.readAsDataURL(file);
