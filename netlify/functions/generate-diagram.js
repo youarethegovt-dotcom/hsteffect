@@ -2,7 +2,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const sharp = require("sharp");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING SUPER-RES PNG ENGINE: V5.0 ---");
+  console.log("--- EXECUTING NASHVILLE STANDARD ENGINE: V5.1 ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -10,42 +10,30 @@ exports.handler = async (event) => {
 
     const { imageBase64, mimeType, customInstructions, width } = JSON.parse(event.body);
 
-    // AI PROMPT: Focused entirely on technical line clarity
+    // YOUR FIRM STANDARD PROMPT
+    const firmStandard = ".25mm dark charcoal outline around all buildings, .1mm thin gray lines for all of the building forms, roads to be a lighter gray tone, water represented with pale light blue, white masses for buildings with gray shade for the sides of the buildings in shadow, not overly detailed, no text.";
+
     const prompt = `ACT AS A TECHNICAL ARCHITECTURAL ILLUSTRATOR.
-      Convert this aerial into a high-definition site diagram.
-      - STYLE: 0.1mm sharp black (#000000) lines on pure white.
-      - CONTEXT: Solid pale blue (#AACCFF) for water.
-      - QUALITY: No anti-aliasing. No shadows. No blobs. No text.
-      - GOAL: Every building edge must be a distinct, clean path.`;
+      TASK: Convert this aerial into a high-definition site diagram.
+      STYLE: ${customInstructions || firmStandard}
+      TECHNICAL: Pure white background. High contrast. Render 3D depth with shading on building sides as requested.`;
 
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // --- THE MASTER UPSCALE ---
-    // We upscale the 1024px AI image to 3500px (Pro Print Resolution)
-    // We apply a 'sharpen' filter to make the lines "pop" for Illustrator's internal tracer.
+    // 3500px Master Upscale with Professional Sharpening
     const finalWidth = 3500;
-    
     const masterPng = await sharp(aiBuffer)
         .resize({ width: finalWidth })
-        .sharpen({
-            sigma: 1.5,
-            m1: 0.5,
-            m2: 20
-        })
-        .png({ palette: true, quality: 100 }) // Keep it 8-bit for clean color separation
+        .sharpen({ sigma: 1.2, m1: 0.5, m2: 20 })
+        .png({ palette: true, quality: 100 })
         .toBuffer();
-
-    console.log(`Master PNG Created: ${Math.round(masterPng.length / 1024)}KB`);
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        image: masterPng.toString('base64'),
-        svg: "" // We are disabling the server SVG to save payload space
-      }),
+      body: JSON.stringify({ image: masterPng.toString('base64') }),
     };
 
   } catch (error) {
