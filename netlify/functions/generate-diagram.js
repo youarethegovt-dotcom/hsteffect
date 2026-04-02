@@ -1,9 +1,9 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const sharp = require("sharp");
-const potrace = require("potrace"); // Standard import
+const potrace = require("potrace");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING SIMPLIFIED ENGINE: V3.8 ---");
+  console.log("--- EXECUTING CONSTRUCTOR ENGINE: V3.9 ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -14,28 +14,36 @@ exports.handler = async (event) => {
     const palette = { charcoal: "#333333", water: "#AACCFF" };
 
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
-      STYLE: ${customInstructions || "Charcoal outlines (#333333), white building tops, and pale blue water (#AACCFF)."}
-      TECHNICAL: FLAT COLORS ONLY. Pure white background. High contrast.`;
+      STYLE: ${customInstructions || "Charcoal outlines (#333333) and pale blue water (#AACCFF)."}
+      TECHNICAL: FLAT COLORS ONLY. Pure white background. No text. No gradients.`;
 
-    // 1. AI Generation (~15s)
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // 2. Internal Resizing for Speed (800px)
+    // Internal scaling for speed (Your log showed 13s - this keeps it fast)
     const traceSize = 800;
     const traceBuffer = await sharp(aiBuffer).resize(traceSize).toBuffer();
 
-    // 3. THE FIX: DIRECT TRACE CALLS
-    // We remove the complex "getTracer" check and call the library directly.
+    // NEW ROBUST TRACING LOGIC
     const runTrace = (threshold, colorHex, layerName) => {
         return new Promise((resolve, reject) => {
-            // Using the most direct call possible: potrace.trace()
-            potrace.trace(traceBuffer, { threshold, turdSize: 15 }, (err, svg) => {
+            // We use the 'Potrace' constructor instead of the '.trace' shorthand
+            const trace = new potrace.Potrace();
+            
+            trace.setParameters({
+                threshold: threshold,
+                turdSize: 15,
+                optTolerance: 1.0
+            });
+
+            trace.loadImage(traceBuffer, (err) => {
                 if (err) {
-                    console.error(`Trace failed for ${layerName}:`, err);
+                    console.error(`Trace Error [${layerName}]:`, err);
                     return resolve('');
                 }
+                
+                const svg = trace.getSVG();
                 const paths = svg.match(/<path.*?\/>/g);
                 if (!paths) return resolve('');
                 
@@ -45,13 +53,11 @@ exports.handler = async (event) => {
         });
     };
 
-    console.log("Generating Vector Layers...");
-    const [contextLayer, outlineLayer] = await Promise.all([
-        runTrace(210, palette.water, "Site_Context"),
-        runTrace(120, palette.charcoal, "Architectural_Outlines")
-    ]);
+    console.log("Processing Layers...");
+    // We run these one after another for maximum stability
+    const contextLayer = await runTrace(215, palette.water, "Site_Context");
+    const outlineLayer = await runTrace(125, palette.charcoal, "Architectural_Outlines");
 
-    // 4. Assemble SVG
     const finalSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${traceSize} ${traceSize}" preserveAspectRatio="none">
             <rect width="${traceSize}" height="${traceSize}" fill="white"/>
