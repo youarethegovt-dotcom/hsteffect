@@ -1,0 +1,7 @@
+[functions]
+ # Extends the allowed time to 26 seconds (Netlify's max for standard functions)
+ timeout = 26
+[[redirects]]
+ from = "/*"
+ to = "/index.html"
+ status = 200
