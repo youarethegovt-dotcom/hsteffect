@@ -3,36 +3,37 @@ const potrace = require("potrace");
 const sharp = require("sharp");
 
 exports.handler = async (event) => {
-  console.log("--- STARTING NASHVILLE PRO PIPELINE ---");
+  console.log("--- EXECUTING RELIABILITY PATCH: V3.5 ---");
+
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-image-preview" }, { apiVersion: "v1beta" });
 
     const { imageBase64, mimeType, customInstructions, width, height } = JSON.parse(event.body);
 
-    // Firm Standard Palette
     const palette = { charcoal: "#333333", water: "#AACCFF" };
+    const defaultStyle = ".25mm charcoal (#333333) outlines for buildings, pale light blue (#AACCFF) for water.";
 
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
-      STYLE: ${customInstructions || "Charcoal outlines, white building tops, blue water fills."}
-      TECHNICAL: Pure white background. No text. Use only #333333 for lines and #AACCFF for water.`;
+      STYLE: ${customInstructions || defaultStyle}
+      TECHNICAL: Pure white background. High contrast. Use ONLY #333333 and #AACCFF.`;
 
+    // 1. AI Generation
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
+    const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // 1. Scale to Match Upload
-    const aiBuffer = await sharp(Buffer.from(pngBase64, 'base64'))
-      .resize(parseInt(width), parseInt(height), { fit: 'fill' })
-      .toBuffer();
+    // 2. INTERNAL SCALING (The Secret to Speed)
+    // We scale the "Tracing Buffer" to 1000px. This makes the vector math instant.
+    const processingBuffer = await sharp(aiBuffer).resize(1000).toBuffer();
 
-    // 2. Parallel Trace Layers
-    const traceLayer = async (threshold, color, isDetailed) => {
+    // 3. Robust Trace Logic
+    const traceLayer = async (threshold, color) => {
         return new Promise((resolve) => {
-            potrace.trace(aiBuffer, { 
-                threshold, 
-                turdSize: isDetailed ? 5 : 40, 
-                optTolerance: isDetailed ? 0.4 : 1.5 
-            }, (err, svg) => {
+            // Check if potrace is loaded correctly
+            const engine = potrace.trace ? potrace : require("potrace");
+            
+            engine.trace(processingBuffer, { threshold, turdSize: 10 }, (err, svg) => {
                 if (err) return resolve('');
                 const paths = svg.match(/<path.*?\/>/g);
                 resolve(paths ? paths.join('').replace(/fill="black"/g, `fill="${color}"`) : '');
@@ -41,29 +42,32 @@ exports.handler = async (event) => {
     };
 
     const [outlines, context] = await Promise.all([
-        traceLayer(125, palette.charcoal, true), 
-        traceLayer(215, palette.water, false)
+        traceLayer(130, palette.charcoal), 
+        traceLayer(210, palette.water)
     ]);
 
-    // 3. Assemble the Illustrator-Ready SVG
+    // 4. Scale the SVG back up to your original dimensions via viewBox
     const finalSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-            <rect width="100%" height="100%" fill="white"/>
-            <g id="Context_Layers" opacity="0.8">${context}</g>
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+            <rect width="1000" height="1000" fill="white"/>
+            <g id="Context_Layers">${context}</g>
             <g id="Architectural_Outlines">${outlines}</g>
         </svg>`;
+
+    // Create the High-Res PNG return
+    const highResPng = await sharp(aiBuffer).resize(parseInt(width), parseInt(height)).toBuffer();
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
-        image: aiBuffer.toString('base64'), 
+        image: highResPng.toString('base64'), 
         svg: Buffer.from(finalSvg).toString('base64') 
       }),
     };
 
   } catch (error) {
-    console.error("DIAGNOSTIC:", error.message);
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    console.error("DIAGNOSTIC ERROR:", error.message);
+    return { statusCode: 500, body: JSON.stringify({ error: "Pipeline Error: " + error.message }) };
   }
 };
