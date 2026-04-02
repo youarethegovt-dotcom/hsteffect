@@ -9,57 +9,52 @@ exports.handler = async (event) => {
 
     const { imageBase64, mimeType, customInstructions, width, height } = JSON.parse(event.body);
 
-    // We define our 5 "firm standard" colors for the trace
     const palette = {
       charcoal: "#333333",
-      grayLines: "#999999",
-      roads: "#CCCCCC",
-      water: "#AACCFF",
-      shadows: "#666666"
+      water: "#AACCFF"
     };
 
-    const defaultStyle = `.25mm charcoal (#333333) outlines, .1mm gray (#999999) internal lines, 
-      roads are light gray (#CCCCCC), water is pale light blue (#AACCFF), 
-      white building masses with gray shadows (#666666). USE ONLY THESE SOLID COLORS.`;
+    const defaultStyle = ".25mm charcoal (#333333) outlines for buildings, pale light blue (#AACCFF) for all water, white building tops with gray shadows. No text.";
 
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
       STYLE: ${customInstructions || defaultStyle}
-      TECHNICAL: Pure white background. No gradients. Use ONLY the 5 specific hex colors requested.`;
+      TECHNICAL: Use ONLY solid hex colors #333333 and #AACCFF on a white background.`;
 
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
 
-    // 1. Resize the AI result to match your 1897px upload
     const aiBuffer = await sharp(Buffer.from(pngBase64, 'base64'))
       .resize(parseInt(width), parseInt(height), { fit: 'fill' })
       .toBuffer();
 
-    // 2. LAYERED TRACING ENGINE
-    // We trace the image once for the "Black/Charcoal" and once for the "Color" 
-    // to keep the file size small but editable.
+    // SPEED FIX: We only trace the Charcoal (Outlines) at full detail.
+    // We trace the "Context" (Water/Shadows) at a much lower detail to save time.
     
-    const traceLayer = async (colorHex, threshold) => {
+    const traceLayer = async (threshold, color, isDetailed) => {
         return new Promise((resolve, reject) => {
-            potrace.trace(aiBuffer, { threshold, turdSize: 5 }, (err, svg) => {
+            potrace.trace(aiBuffer, { 
+                threshold, 
+                turdSize: isDetailed ? 5 : 25, // Large turdSize = Much faster trace
+                optTolerance: isDetailed ? 0.4 : 1.5 
+            }, (err, svg) => {
                 if (err) reject(err);
-                // We "re-color" the black trace to our target color
-                const coloredSvg = svg.replace(/fill="black"/g, `fill="${colorHex}"`);
-                // Extract just the <path> info
-                const pathOnly = coloredSvg.match(/<path.*?\/>/g);
-                resolve(pathOnly ? pathOnly.join('') : '');
+                const paths = svg.match(/<path.*?\/>/g);
+                const coloredPaths = paths ? paths.join('').replace(/fill="black"/g, `fill="${color}"`) : '';
+                resolve(coloredPaths);
             });
         });
     };
 
-    // We create three primary vector layers: Outlines, Shadows, and Site Features
-    const outlines = await traceLayer(palette.charcoal, 100);
-    const waterAndShadows = await traceLayer(palette.water, 200);
+    // Parallel processing to save seconds
+    const [outlines, context] = await Promise.all([
+        traceLayer(120, palette.charcoal, true),  // High Detail Outlines
+        traceLayer(210, palette.water, false)    // Low Detail Speed Trace for Water/Shadows
+    ]);
 
-    // 3. Construct the Master SVG
     const finalSvg = `
-        <svg version="1.1" xmlns="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
             <rect width="100%" height="100%" fill="white"/>
-            <g id="Water_and_Context">${waterAndShadows}</g>
+            <g id="Context_Layers">${context}</g>
             <g id="Architectural_Outlines">${outlines}</g>
         </svg>`;
 
