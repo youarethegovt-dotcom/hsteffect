@@ -1,8 +1,10 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const potrace = require("potrace");
-const sharp = require("sharp"); // The new resizing engine
+const sharp = require("sharp");
 
 exports.handler = async (event) => {
+  console.log("--- EXECUTING SITE DIAGRAM: VERSION 3.2 ---");
+
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel(
@@ -10,36 +12,39 @@ exports.handler = async (event) => {
       { apiVersion: "v1beta" }
     );
 
-    // We now accept 'width' and 'height' from the frontend
     const { imageBase64, mimeType, customInstructions, width, height } = JSON.parse(event.body);
 
     const defaultStyle = ".25mm dark charcoal outline around all buildings, .1mm thin gray lines for all of the building forms, roads to be a lighter gray tone, water represented with pale light blue, white masses for buildings with gray shade for the sides of the buildings in shadow, not overly detailed, no text.";
 
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
-      TASK: Convert this aerial photo into a high-quality site diagram.
-      STYLE: ${customInstructions || defaultStyle}
-      TECHNICAL: High contrast, clean boundaries, no trees/cars.`;
+      Convert this aerial photo into a high-quality site diagram.
+      - STYLE: ${customInstructions || defaultStyle}
+      - TECHNICAL: Pure white background, high contrast lines, no photographic textures.`;
 
+    // 1. Ask Gemini to generate the diagram
     const result = await model.generateContent([
       { inlineData: { data: imageBase64, mimeType } },
       { text: prompt }
     ]);
 
     const response = await result.response;
-    const pngBase64 = response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
+    const part = response.candidates[0].content.parts.find(p => p.inlineData);
 
-    // --- NEW: RESIZE TO ORIGINAL DIMENSIONS ---
-    console.log(`Upscaling to match original: ${width}x${height}`);
-    const aiBuffer = Buffer.from(pngBase64, 'base64');
+    // GUARD RAIL: If the AI returns text instead of an image (usually a safety trigger)
+    if (!part || !part.inlineData) {
+      throw new Error("AI_NO_IMAGE");
+    }
+
+    const aiBuffer = Buffer.from(part.inlineData.data, 'base64');
     
-    // We resize the AI output back to your original upload size
+    // 2. High-Performance Resize back to your 1897px (or original) width
     const resizedBuffer = await sharp(aiBuffer)
       .resize(parseInt(width), parseInt(height), { fit: 'fill' })
       .toBuffer();
 
-    // Now vectorize the full-res version
+    // 3. Vectorize the high-res result
     const svgData = await new Promise((resolve, reject) => {
-      potrace.trace(resizedBuffer, { threshold: 128 }, (err, svg) => {
+      potrace.trace(resizedBuffer, { threshold: 128, turdSize: 2 }, (err, svg) => {
         if (err) reject(err);
         resolve(svg);
       });
@@ -55,6 +60,14 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    console.error("DIAGNOSTIC:", error.message);
+    
+    let userMessage = "The engine timed out. Try a smaller screenshot.";
+    if (error.message === "AI_NO_IMAGE") userMessage = "The AI refused to draw this site (Safety Trigger). Try zooming in or out slightly.";
+
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: userMessage }),
+    };
   }
 };
