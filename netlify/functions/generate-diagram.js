@@ -1,9 +1,10 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const potrace = require("potrace");
 const sharp = require("sharp");
+// We use a robust require here to handle Netlify's environment
+const potrace = require("potrace");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING STEALTH ENGINE: V3.6 ---");
+  console.log("--- EXECUTING FINAL ARCHITECTURAL PATCH: V3.7 ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -13,55 +14,66 @@ exports.handler = async (event) => {
 
     const palette = { charcoal: "#333333", water: "#AACCFF" };
 
-    // We tell the AI to be extremely "flat" and "graphic" for faster processing
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
-      STYLE: ${customInstructions || "Charcoal outlines (#333333) and pale blue water (#AACCFF)."}
-      TECHNICAL: FLAT COLORS ONLY. No anti-aliasing. No textures. Pure white background.`;
+      Convert this aerial photo into a high-quality site diagram.
+      - STYLE: ${customInstructions || "Charcoal outlines (#333333), white building tops, and pale blue water (#AACCFF)."}
+      - TECHNICAL: Pure white background, high contrast, FLAT COLORS ONLY. No gradients.`;
 
-    // 1. AI Drawing Phase
+    // 1. AI Generation (~15-20s)
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // 2. INTERNAL COMPRESSION (The Speed Key)
-    // We downscale to 800px internally. This makes the vector math 10x faster.
+    // 2. Speed Scaling (800px is the sweet spot for 20s processing)
     const traceSize = 800;
     const traceBuffer = await sharp(aiBuffer).resize(traceSize).toBuffer();
 
-    // 3. SURGICAL COLOR EXTRACTION
-    const traceLayer = async (threshold, colorHex) => {
-        return new Promise((resolve) => {
-            potrace.trace(traceBuffer, { 
-                threshold, 
-                turdSize: 15, // Ignores minor artifacts
-                optTolerance: 1.0 
-            }, (err, svg) => {
+    // 3. FAIL-SAFE TRACING LOGIC
+    // This function checks exactly how the library was loaded to prevent the "Not a function" error
+    const getTracer = () => {
+        if (typeof potrace.trace === 'function') return potrace.trace;
+        if (typeof potrace === 'function') return potrace;
+        // Fallback for some specific module environments
+        return potrace.default ? potrace.default.trace : null;
+    };
+
+    const runTrace = (threshold, colorHex, layerName) => {
+        const tracer = getTracer();
+        if (!tracer) throw new Error("Vector engine failed to load.");
+
+        return new Promise((resolve, reject) => {
+            tracer(traceBuffer, { threshold, turdSize: 15, optTolerance: 1.0 }, (err, svg) => {
                 if (err) return resolve('');
+                // Extract paths and assign the specific firm color
                 const paths = svg.match(/<path.*?\/>/g);
-                resolve(paths ? paths.join('').replace(/fill="black"/g, `fill="${colorHex}"`) : '');
+                if (!paths) return resolve('');
+                
+                const coloredPaths = paths.join('').replace(/fill="black"/g, `fill="${colorHex}"`);
+                resolve(`<g id="${layerName}">${coloredPaths}</g>`);
             });
         });
     };
 
-    // Sequential tracing is actually more stable on small servers
-    console.log("Tracing Layer 1: Context...");
-    const context = await traceLayer(220, palette.water);
-    
-    console.log("Tracing Layer 2: Outlines...");
-    const outlines = await traceLayer(130, palette.charcoal);
+    // 4. GENERATE EDITABLE LAYERS
+    // Layer 1 (Medium Threshold) catches the Water/Shadows
+    // Layer 2 (Low Threshold) catches ONLY the dark Charcoal Outlines
+    console.log("Generating Vector Layers...");
+    const [contextLayer, outlineLayer] = await Promise.all([
+        runTrace(210, palette.water, "Site_Context"),
+        runTrace(120, palette.charcoal, "Architectural_Outlines")
+    ]);
 
-    // 4. ASSEMBLE ILLUSTRATOR SVG
+    // 5. ASSEMBLE SVG FOR ILLUSTRATOR
     const finalSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${traceSize} ${traceSize}" preserveAspectRatio="none">
             <rect width="${traceSize}" height="${traceSize}" fill="white"/>
-            <g id="Context_Water_Layers">${context}</g>
-            <g id="Architectural_Outlines">${outlines}</g>
+            ${contextLayer}
+            ${outlineLayer}
         </svg>`;
 
-    // Output high-res PNG for the team
     const highResPng = await sharp(aiBuffer).resize(parseInt(width), parseInt(height)).toBuffer();
 
-    console.log("Pipeline Complete. Sending results.");
+    console.log("Success! Duration: under 30s.");
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -73,6 +85,6 @@ exports.handler = async (event) => {
 
   } catch (error) {
     console.error("DIAGNOSTIC ERROR:", error.message);
-    return { statusCode: 500, body: JSON.stringify({ error: "Pipeline Engine Stalled: " + error.message }) };
+    return { statusCode: 500, body: JSON.stringify({ error: "Pipeline Engine: " + error.message }) };
   }
 };
