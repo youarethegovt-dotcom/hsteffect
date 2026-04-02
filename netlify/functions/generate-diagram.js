@@ -3,10 +3,7 @@ const sharp = require("sharp");
 const potrace = require("potrace");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING RECOVERY ENGINE: V4.4 ---");
-  
-  // DIAGNOSTIC: This tells us exactly what tools are available in the library
-  console.log("Library Keys Found:", Object.keys(potrace));
+  console.log("--- EXECUTING MASTER ENGINE: V4.5 ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -17,35 +14,31 @@ exports.handler = async (event) => {
 
     const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
       STYLE: ${customInstructions || "Charcoal outlines (#333333) and pale blue water (#AACCFF)."}
-      TECHNICAL: Pure white background. FLAT COLORS ONLY. No gradients. No text.`;
+      TECHNICAL: Pure white background. FLAT COLORS ONLY. No text. No gradients.`;
 
-    // 1. AI Generation (Working perfectly at ~15s)
+    // 1. AI Generation (Proven stable)
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // 2. Speed Scaling (800px is our "Safe Zone")
+    // 2. High-speed Resizing (800px)
     const traceSize = 800;
     const traceBuffer = await sharp(aiBuffer).resize(traceSize).toBuffer();
 
-    // 3. THE "SUPER-ROBUST" TRACER
+    // 3. THE "DEEP DIVE" TRACER
+    // This looks for the function in every possible 'Node' location to prevent the crash
     const runTrace = (threshold, colorHex, layerName) => {
         return new Promise((resolve) => {
-            // EXHAUSTIVE SEARCH: We look for the trace function in every possible 'Node' location
-            const tracer = potrace.trace || 
-                           (potrace.default && potrace.default.trace) || 
-                           (typeof potrace === 'function' ? potrace : null);
+            // Check for potrace.trace, potrace.default.trace, or the potrace object itself
+            const tracer = potrace.trace || (potrace.default && potrace.default.trace) || (typeof potrace === 'function' ? potrace : null);
             
             if (!tracer) {
-                console.error(`ERROR: Tracer missing for ${layerName}. Keys:`, Object.keys(potrace));
+                console.error("Vector tool not found in registry.");
                 return resolve("");
             }
 
-            tracer(traceBuffer, { threshold, turdSize: 20 }, (err, svg) => {
-                if (err) {
-                    console.error(`Trace error for ${layerName}:`, err);
-                    return resolve("");
-                }
+            tracer(traceBuffer, { threshold, turdSize: 20, optTolerance: 1.0 }, (err, svg) => {
+                if (err) return resolve("");
                 const paths = svg.match(/<path.*?\/>/g);
                 if (!paths) return resolve("");
                 const coloredPaths = paths.join('').replace(/fill="black"/g, `fill="${colorHex}"`);
@@ -54,22 +47,21 @@ exports.handler = async (event) => {
         });
     };
 
-    console.log("Generating Vector Layers...");
-    // We prioritize Outlines first for the firm standard
-    const outlineLayer = await runTrace(125, palette.charcoal, "Architectural_Outlines");
-    const contextLayer = await runTrace(210, palette.water, "Nashville_Site_Context");
+    console.log("Building Vector Layers...");
+    const context = await runTrace(215, palette.water, "Nashville_Site_Context");
+    const outlines = await runTrace(120, palette.charcoal, "Architectural_Outlines");
 
-    // 4. ASSEMBLE SVG FOR ILLUSTRATOR
+    // 4. ASSEMBLE SVG
     const finalSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${traceSize} ${traceSize}" preserveAspectRatio="none">
             <rect width="${traceSize}" height="${traceSize}" fill="white"/>
-            ${contextLayer}
-            ${outlineLayer}
+            ${context}
+            ${outlines}
         </svg>`;
 
     const highResPng = await sharp(aiBuffer).resize(parseInt(width), parseInt(height)).toBuffer();
 
-    console.log("Success! Sending data to Nashville.");
+    console.log("Success! Pipeline Complete.");
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -80,7 +72,7 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
-    console.error("CRITICAL DIAGNOSTIC:", error.message);
+    console.error("CRITICAL ERROR:", error.message);
     return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
