@@ -120,9 +120,8 @@
         });
 
         // EXECUTE ENGINE
-        btn.onclick = async () => {
-            const originalText = btn.innerText;
-            btn.innerText = "VECTORIZING SITE... PLEASE WAIT";
+                btn.onclick = async () => {
+            btn.innerText = "VECTORIZING SITE...";
             btn.classList.add('loading-pulse');
             btn.disabled = true;
             statusMsg.classList.remove('hidden');
@@ -132,8 +131,6 @@
                 reader.readAsDataURL(input.files[0]);
                 reader.onload = async () => {
                     const base64 = reader.result.split(',')[1];
-                    const startTime = Date.now();
-
                     const response = await fetch('/.netlify/functions/generate-diagram', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -146,32 +143,25 @@
                         })
                     });
 
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || "Server Timeout (30s limit reached)");
-                    }
-
                     const data = await response.json();
                     
-                    // Display Output
-                    outputImg.src = `data:image/png;base64,${data.image}`;
-                    document.getElementById('downloadPng').href = `data:image/png;base64,${data.image}`;
-                    document.getElementById('downloadPng').download = `SitePlan_${origW}x${origH}.png`;
-                    document.getElementById('downloadSvg').href = `data:image/svg+xml;base64,${data.svg}`;
-                    document.getElementById('downloadSvg').download = `SiteVector_${origW}x${origH}.svg`;
+                    if (data.error) throw new Error(data.error);
 
+                    // --- THE FIX: Ensure we are setting the SRC correctly ---
+                    outputImg.src = `data:image/png;base64,${data.image}`;
+                    
+                    document.getElementById('downloadPng').href = `data:image/png;base64,${data.image}`;
+                    document.getElementById('downloadSvg').href = `data:image/svg+xml;base64,${data.svg}`;
+
+                    // Reveal the results
                     resultContainer.classList.remove('hidden');
                     document.getElementById('resBadge').innerText = `${origW} X ${origH}`;
                     resultContainer.scrollIntoView({ behavior: 'smooth' });
-                    
-                    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-                    console.log(`Site Processed in ${duration}s`);
                 };
             } catch (err) {
-                console.error("DIAGNOSTIC ERROR:", err);
-                alert("ENGINE NOTICE: " + err.message + "\n\nTip: If it timed out, try a smaller screenshot (under 1500px). Color vectoring high-res images is computationally heavy!");
+                alert("ENGINE NOTICE: " + err.message);
             } finally {
-                btn.innerText = originalText;
+                btn.innerText = "GENERATE DIAGRAM";
                 btn.classList.remove('loading-pulse');
                 btn.disabled = false;
                 statusMsg.classList.add('hidden');
