@@ -3,7 +3,7 @@ const sharp = require("sharp");
 const potrace = require("potrace");
 
 exports.handler = async (event) => {
-  console.log("--- EXECUTING MASTER ENGINE: V4.5 ---");
+  console.log("--- EXECUTING GEOMETRY-CORRECT ENGINE: V4.6 ---");
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -12,32 +12,38 @@ exports.handler = async (event) => {
     const { imageBase64, mimeType, customInstructions, width, height } = JSON.parse(event.body);
     const palette = { charcoal: "#333333", water: "#AACCFF" };
 
-    const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
-      STYLE: ${customInstructions || "Charcoal outlines (#333333) and pale blue water (#AACCFF)."}
-      TECHNICAL: Pure white background. FLAT COLORS ONLY. No text. No gradients.`;
+    // ASPECT RATIO MATH: This prevents the "squish"
+    const originalWidth = parseInt(width);
+    const originalHeight = parseInt(height);
+    const ratio = originalHeight / originalWidth;
+    
+    // We set the trace width to 1000px and calculate the proportional height
+    const traceW = 1000;
+    const traceH = Math.round(1000 * ratio);
 
-    // 1. AI Generation (Proven stable)
+    const prompt = `ACT AS AN ARCHITECTURAL ILLUSTRATOR. 
+      Convert this site into a diagram with:
+      - Deep Black (#000000) outlines for all buildings and roads.
+      - Solid Pale Blue (#AACCFF) for water context.
+      - Pure white background. FLAT COLORS ONLY. HIGH CONTRAST.`;
+
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // 2. High-speed Resizing (800px)
-    const traceSize = 800;
-    const traceBuffer = await sharp(aiBuffer).resize(traceSize).toBuffer();
+    // 1. Proportional Resize
+    const traceBuffer = await sharp(aiBuffer).resize(traceW, traceH).toBuffer();
 
-    // 3. THE "DEEP DIVE" TRACER
-    // This looks for the function in every possible 'Node' location to prevent the crash
-    const runTrace = (threshold, colorHex, layerName) => {
+    const runTrace = (threshold, colorHex, layerName, isOutlines) => {
         return new Promise((resolve) => {
-            // Check for potrace.trace, potrace.default.trace, or the potrace object itself
             const tracer = potrace.trace || (potrace.default && potrace.default.trace) || (typeof potrace === 'function' ? potrace : null);
             
-            if (!tracer) {
-                console.error("Vector tool not found in registry.");
-                return resolve("");
-            }
-
-            tracer(traceBuffer, { threshold, turdSize: 20, optTolerance: 1.0 }, (err, svg) => {
+            // We adjusted the thresholds: 180 is broader to catch more lines
+            tracer(traceBuffer, { 
+                threshold: threshold, 
+                turdSize: isOutlines ? 5 : 30,
+                optTolerance: isOutlines ? 0.4 : 1.2
+            }, (err, svg) => {
                 if (err) return resolve("");
                 const paths = svg.match(/<path.*?\/>/g);
                 if (!paths) return resolve("");
@@ -47,21 +53,22 @@ exports.handler = async (event) => {
         });
     };
 
-    console.log("Building Vector Layers...");
-    const context = await runTrace(215, palette.water, "Nashville_Site_Context");
-    const outlines = await runTrace(120, palette.charcoal, "Architectural_Outlines");
+    console.log(`Tracing Layers at ${traceW}x${traceH}...`);
+    // Outlines (captured at 180 threshold to ensure they aren't missed)
+    const outlines = await runTrace(180, palette.charcoal, "Architectural_Outlines", true);
+    // Water (captured at a higher threshold)
+    const context = await runTrace(225, palette.water, "Nashville_Site_Context", false);
 
-    // 4. ASSEMBLE SVG
+    // 2. ASSEMBLE SVG (Correct Viewbox)
     const finalSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${traceSize} ${traceSize}" preserveAspectRatio="none">
-            <rect width="${traceSize}" height="${traceSize}" fill="white"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="${originalWidth}" height="${originalHeight}" viewBox="0 0 ${traceW} ${traceH}">
+            <rect width="${traceW}" height="${traceH}" fill="white"/>
             ${context}
             ${outlines}
         </svg>`;
 
-    const highResPng = await sharp(aiBuffer).resize(parseInt(width), parseInt(height)).toBuffer();
+    const highResPng = await sharp(aiBuffer).resize(originalWidth, originalHeight).toBuffer();
 
-    console.log("Success! Pipeline Complete.");
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -72,7 +79,7 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
-    console.error("CRITICAL ERROR:", error.message);
+    console.error("DIAGNOSTIC:", error.message);
     return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
