@@ -10,18 +10,20 @@ exports.handler = async (event) => {
 
     const { imageBase64, mimeType, customInstructions } = JSON.parse(event.body);
 
+    // YOUR FIRM STANDARD (Ensuring shadows and depth are forced)
     const firmStandard = ".25mm dark charcoal outline around all buildings, .1mm thin gray lines for all of the building forms, roads to be a lighter gray tone, water represented with pale light blue, white masses for buildings with gray shade for the sides of the buildings in shadow, not overly detailed, no text.";
 
     const prompt = `ACT AS A SENIOR ARCHITECTURAL ILLUSTRATOR.
       Convert this aerial map into a site diagram.
       INSTRUCTIONS: ${customInstructions || firmStandard}
-      TECHNICAL REQUIREMENT: Explicitly render 3D depth with gray shading on building sides. High contrast. Pure white background. No text.`;
+      TECHNICAL REQUIREMENT: You MUST render 3D depth with gray shading on the building sides in shadow. High contrast. Pure white background. No text.`;
 
+    // 1. AI Generation
     const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, { text: prompt }]);
     const pngBase64 = result.response.candidates[0].content.parts.find(p => p.inlineData).inlineData.data;
     const aiBuffer = Buffer.from(pngBase64, 'base64');
 
-    // 2500px + Indexed Compression = Fast & Stable
+    // 2. THE STABILITY TWEAK: 2500px + Indexed Compression
     const masterPng = await sharp(aiBuffer)
         .resize({ width: 2500 })
         .sharpen({ sigma: 1.0 })
@@ -31,6 +33,8 @@ exports.handler = async (event) => {
             quality: 85 
         })
         .toBuffer();
+
+    console.log(`Stability Master Created: ${Math.round(masterPng.length / 1024)}KB`);
 
     return {
       statusCode: 200,
